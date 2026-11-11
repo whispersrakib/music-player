@@ -8,6 +8,7 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.MediaStore.Audio.Media as m
 import android.util.LruCache
 import android.util.Size
 import androidx.compose.runtime.getValue
@@ -54,7 +55,6 @@ class MusicRepository(private val context: Context) {
 
     suspend fun load(): List<Song> = withContext(Dispatchers.IO) {
         val out = ArrayList<Song>()
-        val m = MediaStore.Audio.Media
         val projection = arrayOf(m._ID, m.TITLE, m.ARTIST, m.ALBUM, m.ALBUM_ID, m.DURATION, m.TRACK, m.DATE_ADDED)
         val selection = "${m.IS_MUSIC} != 0 AND ${m.DURATION} >= 10000"
         context.contentResolver.query(m.EXTERNAL_CONTENT_URI, projection, selection, null, "${m.TITLE} COLLATE NOCASE ASC")
