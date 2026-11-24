@@ -76,7 +76,8 @@ class MusicRepository(private val context: Context) {
                     )
                 }
             }
-        out
+        // the same file can be indexed twice (e.g. copied to two folders) – show each song once
+        out.distinctBy { listOf(it.title.lowercase(), it.artist.lowercase(), it.album.lowercase(), it.durationMs / 1000) }
     }
 
     /** Asks Android to (re)index audio files in Music/ and Download/, e.g. after `adb push`. */

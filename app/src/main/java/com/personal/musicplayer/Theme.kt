@@ -2,6 +2,7 @@ package com.personal.musicplayer
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -27,7 +28,11 @@ private val LightScheme = lightColorScheme(
 /** Follows the phone's dark / light setting. */
 @Composable
 fun PlayerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkScheme else LightScheme, content = content)
+    val scheme = if (isSystemInDarkTheme()) DarkScheme else LightScheme
+    MaterialTheme(colorScheme = scheme) {
+        // Surface sets the default text/icon colour (otherwise it falls back to black)
+        Surface(color = scheme.background, content = content)
+    }
 }
 
 private fun v(name: String, path: String): ImageVector =
@@ -51,7 +56,7 @@ object Ic {
     val ChevronDown = v("down", "M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6 1.41,-1.41z")
     val ChevronRight = v("right", "M10,6L8.59,7.41 13.17,12l-4.58,4.59L10,18l6,-6z")
     val Back = v("back", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
-    val Clock = v("clock", "M12,2C6.5,2 2,6.5 2,12s4.5,10 10,10 10,-4.5 10,-10S17.5,2 12,2zM12.5,7H11v6l5.2,3.2 0.8,-1.3 -4.5,-2.7V7z")
+    val Clock = v("clock", "M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z")
     val Library = v("library", "M20,2H8C6.9,2 6,2.9 6,4v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V4C22,2.9 21.1,2 20,2zM18,9h-3v5.5C15,15.88 13.88,17 12.5,17S10,15.88 10,14.5 11.12,12 12.5,12c0.57,0 1.08,0.19 1.5,0.51V7h4V9z M4,6H2v14c0,1.1 0.9,2 2,2h14v-2H4V6z")
     val Album = v("album", "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,16c-2.21,0 -4,-1.79 -4,-4s1.79,-4 4,-4 4,1.79 4,4 -1.79,4 -4,4zM12,11c-0.55,0 -1,0.45 -1,1s0.45,1 1,1 1,-0.45 1,-1 -0.45,-1 -1,-1z")
     val Person = v("person", "M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4zM12,14c-2.67,0 -8,1.34 -8,4v2h16v-2c0,-2.66 -5.33,-4 -8,-4z")
