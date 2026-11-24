@@ -15,18 +15,24 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -48,9 +55,7 @@ import androidx.core.content.ContextCompat
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Library("Library", Ic.Library),
-    Albums("Albums", Ic.Album),
-    Artists("Artists", Ic.Person),
-    Songs("Songs", Ic.Note),
+    Favorites("Favorites", Ic.Star),
     Search("Search", Ic.Search),
 }
 
@@ -72,7 +77,7 @@ private fun App(vm: PlayerViewModel) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { vm.applyCover(it) }
     LaunchedEffect(vm.pickRequest) { if (vm.pickRequest > 0) coverPicker.launch("image/*") }
-    val notifLauncher =rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     LaunchedEffect(granted) {
         if (granted) {
@@ -105,37 +110,22 @@ private fun App(vm: PlayerViewModel) {
                 val open: (Screen) -> Unit = { stack.add(it) }
                 when {
                     vm.loaded && vm.songs.isEmpty() -> EmptyState(vm.scanning, vm::rescan)
+                    top is Screen.Playlists -> PlaylistsPage(vm, back, open)
+                    top is Screen.Artists -> ArtistsPage(vm, back, open)
+                    top is Screen.Albums -> AlbumsPage(vm, back, open)
+                    top is Screen.Songs -> SongsPage(vm, back)
                     top is Screen.Album -> AlbumDetail(vm, top.id, back)
                     top is Screen.Artist -> ArtistDetail(vm, top.name, back)
                     top is Screen.PlaylistScreen -> PlaylistDetail(vm, top.id, back)
-                    top is Screen.Favorites -> FavoritesDetail(vm, back)
                     else -> when (tab) {
                         Tab.Library -> LibraryTab(vm, open)
-                        Tab.Albums -> AlbumsTab(vm, open)
-                        Tab.Artists -> ArtistsTab(vm, open)
-                        Tab.Songs -> SongsTab(vm)
+                        Tab.Favorites -> FavoritesTab(vm)
                         Tab.Search -> SearchTab(vm, open)
                     }
                 }
             }
             MiniPlayer(vm) { expanded = true }
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                Tab.entries.forEach { t ->
-                    NavigationBarItem(
-                        selected = tab == t,
-                        onClick = { tab = t; stack.clear() },
-                        icon = { Icon(t.icon, t.label) },
-                        label = { Text(t.label, fontSize = 11.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = Color.Transparent,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                }
-            }
+            FloatingTabs(tab) { tab = it; stack.clear() }
         }
 
         AnimatedVisibility(
@@ -143,5 +133,38 @@ private fun App(vm: PlayerViewModel) {
             enter = slideInVertically { it },
             exit = slideOutVertically { it },
         ) { NowPlaying(vm) { expanded = false } }
+    }
+}
+
+/** Rounded floating tab bar with a separate round Search button. */
+@Composable
+private fun FloatingTabs(tab: Tab, onSelect: (Tab) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(Modifier.weight(1f).height(64.dp).clip(RoundedCornerShape(32.dp)).background(cs.surfaceVariant).padding(5.dp)) {
+            listOf(Tab.Library, Tab.Favorites).forEach { t ->
+                val sel = tab == t
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(27.dp))
+                        .background(if (sel) cs.onSurface.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable { onSelect(t) },
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(t.icon, t.label, Modifier.size(24.dp), tint = if (sel) cs.primary else cs.onSurface)
+                    Text(t.label, fontSize = 12.sp, color = if (sel) cs.primary else cs.onSurface)
+                }
+            }
+        }
+        Box(
+            Modifier.size(64.dp).clip(CircleShape).background(cs.surfaceVariant).clickable { onSelect(Tab.Search) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Tab.Search.icon, "Search", Modifier.size(28.dp), tint = if (tab == Tab.Search) cs.primary else cs.onSurface)
+        }
     }
 }
