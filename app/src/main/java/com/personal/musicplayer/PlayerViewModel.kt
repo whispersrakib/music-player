@@ -161,11 +161,23 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         )
         .build()
 
+    // Songs you queue by hand are tagged "<id>#q" so they stay together, right after the current song.
+    private fun idOf(item: MediaItem) = item.mediaId.substringBefore('#').toLongOrNull()
+    private fun isQueued(item: MediaItem) = item.mediaId.endsWith("#q")
+    private fun queuedItem(s: Song) = toItem(s).buildUpon().setMediaId("${s.id}#q").build()
+    private fun toast(msg: String) = android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
+
+    // Shuffle is done here (not by the player) so "Play Next" / "Add to Queue" land exactly where expected.
+    private var baseList: List<Song> = emptyList()
+
     fun play(list: List<Song>, index: Int, shuffleOn: Boolean? = null) {
         val c = controller ?: return
         if (list.isEmpty()) return
-        if (shuffleOn != null) c.shuffleModeEnabled = shuffleOn
-        c.setMediaItems(list.map(::toItem), index, 0L)
+        if (shuffleOn != null) shuffle = shuffleOn
+        baseList = list
+        val ordered = if (shuffle) listOf(list[index]) + list.filterIndexed { i, _ -> i != index }.shuffled() else list
+        c.shuffleModeEnabled = false
+        c.setMediaItems(ordered.map(::toItem), if (shuffle) 0 else index, 0L)
         c.prepare()
         c.play()
     }
@@ -185,7 +197,24 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (c.currentPosition > 3000) c.seekTo(0) else c.seekToPreviousMediaItem()
     }
     fun seekTo(ms: Long) { controller?.seekTo(ms); positionMs = ms }
-    fun toggleShuffle() { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } }
+    fun toggleShuffle() {
+        val c = controller ?: return
+        shuffle = !shuffle
+        if (c.mediaItemCount == 0) return
+        val cur = c.currentMediaItemIndex
+        val upcoming = (cur + 1 until c.mediaItemCount).map { c.getMediaItemAt(it) }
+        val (queued, others) = upcoming.partition { isQueued(it) }
+        val rest: List<MediaItem> = if (shuffle) {
+            others.shuffled()
+        } else {
+            val i = baseList.indexOfFirst { it.id == c.currentMediaItem?.let(::idOf) }
+            if (i < 0) return
+            baseList.drop(i + 1).map(::toItem)
+        }
+        if (upcoming.isNotEmpty()) c.removeMediaItems(cur + 1, c.mediaItemCount)
+        val all = queued + rest
+        if (all.isNotEmpty()) c.addMediaItems(all)
+    }
     fun cycleRepeat() {
         val c = controller ?: return
         c.repeatMode = when (c.repeatMode) {
@@ -198,11 +227,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- queue ----
     fun playNext(s: Song) {
         val c = controller ?: return
-        if (c.mediaItemCount == 0) play(listOf(s), 0) else c.addMediaItem(c.currentMediaItemIndex + 1, toItem(s))
+        if (c.mediaItemCount == 0) { play(listOf(s), 0); return }
+        c.addMediaItem(c.currentMediaItemIndex + 1, queuedItem(s))
+        toast("Playing next: ${s.title}")
     }
     fun addToQueue(s: Song) {
         val c = controller ?: return
-        if (c.mediaItemCount == 0) play(listOf(s), 0) else c.addMediaItem(toItem(s))
+        if (c.mediaItemCount == 0) { play(listOf(s), 0); return }
+        // after the songs already queued by hand, before the rest of the list
+        var at = c.currentMediaItemIndex + 1
+        while (at < c.mediaItemCount && isQueued(c.getMediaItemAt(at))) at++
+        c.addMediaItem(at, queuedItem(s))
+        toast("Added to queue: ${s.title}")
     }
     fun jumpTo(windowIndex: Int) { controller?.let { it.seekToDefaultPosition(windowIndex); it.play() } }
     fun removeFromQueue(windowIndex: Int) { controller?.removeMediaItem(windowIndex) }
@@ -242,9 +278,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- sync from the player ----
     private fun sync() {
         val c = controller ?: return
-        currentSong = c.currentMediaItem?.mediaId?.toLongOrNull()?.let { songMap[it] }
+        currentSong = c.currentMediaItem?.let(::idOf)?.let { songMap[it] }
         isPlaying = c.isPlaying
-        shuffle = c.shuffleModeEnabled
         repeatMode = c.repeatMode
         durationMs = c.duration.takeIf { it != C.TIME_UNSET }?.coerceAtLeast(0) ?: 0L
         positionMs = c.currentPosition
@@ -255,10 +290,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val tl = c.currentTimeline
         if (tl.isEmpty) return emptyList()
         val out = ArrayList<QueueEntry>()
-        var i = tl.getNextWindowIndex(c.currentMediaItemIndex, Player.REPEAT_MODE_OFF, c.shuffleModeEnabled)
+        var i = tl.getNextWindowIndex(c.currentMediaItemIndex, Player.REPEAT_MODE_OFF, false)
         while (i != C.INDEX_UNSET && out.size < 200) {
-            c.getMediaItemAt(i).mediaId.toLongOrNull()?.let { id -> songMap[id]?.let { out.add(QueueEntry(i, it)) } }
-            i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, c.shuffleModeEnabled)
+            idOf(c.getMediaItemAt(i))?.let { id -> songMap[id]?.let { out.add(QueueEntry(i, it)) } }
+            i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, false)
         }
         return out
     }
